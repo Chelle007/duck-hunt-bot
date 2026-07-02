@@ -1,5 +1,7 @@
 .env
 ducks.db
+duck_spots/
+bot_state.json
 __pycache__/
 *.pyc
 .venv/

@@ -16,9 +16,7 @@ class VerificationResult:
     is_duck: bool
     number_seen: Optional[int]
     match: bool
-    suspicious: bool
     reason: str
-    suspicion_reason: str
 
 
 def _extract_json(text: str) -> dict:
@@ -39,33 +37,38 @@ def verify_duck_photo(
     """Verify that the photo shows a resin duck and the visible number matches."""
     client = genai.Client(api_key=api_key)
 
-    prompt = f"""You are verifying submissions for a duck hunt game.
+    prompt = f"""You are a strict photo verifier for a duck hunt game. Players must send an unedited in-person photo of a numbered resin duck toy.
 
 The player claims they found duck number {claimed_number}.
 
-Look at the image and determine:
-1. Is there a small resin duck toy visible in the photo? (Ducks may be any color — pink, blue, green, etc. Do not require a specific color.)
-2. Is there a number written or printed under/near the duck?
-3. Does the visible number match the claimed number {claimed_number}?
-4. Does the image look suspicious or edited? (screenshot, downloaded image, cropped/edited number, collage, photoshopped, or not a fresh photo of a physical duck)
+Examine the image carefully for signs of cheating or editing.
 
 Respond with ONLY valid JSON in this exact shape:
 {{
   "is_duck": true or false,
   "number_seen": integer or null if unreadable,
+  "number_is_physical": true or false,
+  "image_authentic": true or false,
   "match": true or false,
-  "suspicious": true or false,
-  "suspicion_reason": "short explanation if suspicious, otherwise empty string",
   "reason": "short explanation"
 }}
 
-Rules:
-- "is_duck" is true only if a small resin duck toy is clearly visible. Color does not matter.
-- "number_seen" should be the number you can read from the image, or null if unreadable.
-- "match" is true only if is_duck is true AND number_seen equals {claimed_number}.
-- "suspicious" is true if the image might be fake, edited, a screenshot of another photo, or not a trustworthy fresh photo of a real duck.
-- When in doubt about authenticity, set suspicious to true.
-- If the image is blurry or the number is unclear, set number_seen to null and match to false.
+Field definitions:
+- "is_duck": true only if a small resin DUCK-SHAPED toy is clearly visible (not a bottle, gem, or other shape). Color does not matter.
+- "number_seen": the integer you can read, or null if unreadable.
+- "number_is_physical": true only if the number appears on a real physical label, sticker, tag, or handwriting on/near the duck — with natural lighting, perspective, and edges that belong in the scene. false if the number looks digitally added, pasted, photoshopped, drawn in an editor, on a flat white/colored rectangle overlay, has a drop shadow from editing, has unnaturally sharp rectangular borders, or does not follow the surface curvature/lighting of the object.
+- "image_authentic": true only if this looks like a single unedited photo taken in person right now. false for screenshots, downloaded images, collages, heavy filters, or any edited/composited image.
+- "match": true ONLY when ALL of these are true: is_duck, number_seen equals {claimed_number}, number_is_physical, image_authentic.
+
+REJECT examples (set number_is_physical=false and/or image_authentic=false and match=false):
+- A number on a white square pasted onto the object with perfect sharp edges
+- Digital text overlay or markup added after the photo was taken
+- A number floating on the image without a physical sticker/tag
+- Screenshot of another photo
+- Number that looks too crisp/clean compared to the rest of the photo
+
+When unsure about editing or overlays, set number_is_physical=false, image_authentic=false, and match=false.
+If blurry or number unclear, set number_seen=null and match=false.
 """
 
     response = client.models.generate_content(
@@ -86,9 +89,7 @@ Rules:
             is_duck=False,
             number_seen=None,
             match=False,
-            suspicious=False,
             reason="Gemini returned an empty response.",
-            suspicion_reason="",
         )
 
     try:
@@ -98,9 +99,7 @@ Rules:
             is_duck=False,
             number_seen=None,
             match=False,
-            suspicious=False,
             reason="Could not parse verification response.",
-            suspicion_reason="",
         )
 
     number_seen = data.get("number_seen")
@@ -111,20 +110,22 @@ Rules:
             number_seen = None
 
     is_duck = bool(data.get("is_duck", False))
-    suspicious = bool(data.get("suspicious", False))
-    suspicion_reason = str(data.get("suspicion_reason", "")).strip()
+    number_is_physical = bool(data.get("number_is_physical", False))
+    image_authentic = bool(data.get("image_authentic", False))
     reason = str(data.get("reason", "No reason provided."))
 
-    if is_duck and number_seen == claimed_number:
-        match = True
-    else:
+    match = bool(data.get("match", False))
+    if (
+        not is_duck
+        or number_seen != claimed_number
+        or not number_is_physical
+        or not image_authentic
+    ):
         match = False
 
     return VerificationResult(
         is_duck=is_duck,
         number_seen=number_seen,
         match=match,
-        suspicious=suspicious,
         reason=reason,
-        suspicion_reason=suspicion_reason,
     )

@@ -33,9 +33,18 @@ Edit `.env` and fill in `BOT_TOKEN` and `GEMINI_API_KEY`.
 
 If your group uses forum topics and you skip `GROUP_TOPIC_ID`, announcements will land in **General** by default.
 
-Set `ADMIN_USER_ID` (your Telegram user ID from `/chatid` in DM with the bot) to receive photos that look edited or suspicious. Use `/remove <number>` in DM to revoke a claim — the group will be notified.
+Set `ADMIN_USER_ID` (your Telegram user ID from `/chatid` in DM with the bot) to enable admin commands and receive manual review requests from players.
 
-### 5. Run the bot
+### 5. Save hiding-spot photos (admin, before the party)
+
+1. DM the bot and run `/input_mode`
+2. Send a photo of each duck in its hiding spot with the duck number as the caption (e.g. `37`)
+3. Run `/done` when finished
+4. Use `/spot 37` to retrieve a hiding photo later, or `/missing` to see which numbers are not saved yet
+
+Photos are stored locally in `duck_spots/` (configurable via `DUCK_SPOTS_DIR`).
+
+### 6. Run the bot
 
 ```bash
 python bot.py
@@ -50,16 +59,38 @@ On first run, the bot creates `ducks.db` and pre-seeds ducks 1–100.
 3. The bot verifies the photo and records your find
 4. A group announcement is posted: "Duck #37 found by @alice! 63 ducks left."
 
-Use `/leaderboard` and `/remaining` in the group. Claims must be sent in DM.
+If verification fails twice in a row for the same duck, a button appears to request manual review from the admin.
+
+Use `/leaderboard` and `/remaining` in the group. Claims must be sent in DM. Type `/help` for the full command list.
 
 ## Commands
+
+### Players
 
 | Command | Description |
 |---------|-------------|
 | `/start` | Rules and how to claim |
+| `/help` | List available commands |
 | `/leaderboard` | Ranked list of finders |
 | `/remaining` | How many ducks are left |
-| `/chatid` | Print the current chat ID (for setup) |
+
+### Admin (DM only)
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Player + admin command lists |
+| `/input_mode` | Start saving hiding-spot photos |
+| `/done` | Exit input mode |
+| `/spot <n>` | Retrieve hiding photo for duck #n |
+| `/missing` | List duck numbers without a saved spot |
+| `/start_game` | Open the hunt for new claims |
+| `/end_game` | Stop accepting new claims |
+| `/remove <n>` | Revoke a claim (group is notified) |
+| `/chatid` | Print chat/topic IDs for setup |
+
+When a player requests manual review, the admin receives the photo in DM with **Accept** / **Reject** buttons. Accept records the claim and posts the usual group announcement.
+
+Use `/start_game` before the party and `/end_game` when finished. Game state is saved to `bot_state.json` and survives bot restarts.
 
 ## Database
 
@@ -69,7 +100,7 @@ SQLite file at `ducks.db` (configurable via `DB_PATH`). You can inspect or edit 
 
 No code changes needed:
 
-1. Copy the project folder and `ducks.db` to your server
+1. Copy the project folder, `ducks.db`, and `duck_spots/` to your server
 2. Set the same `.env` values
 3. Run `python bot.py` (use `tmux`, `nohup`, or `systemd` to keep it running)
 
